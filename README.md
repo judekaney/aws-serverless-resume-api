@@ -104,6 +104,9 @@ aws apigateway put-integration-response --rest-api-id lorcvbwvua --resource-id h
 
 aws apigateway put-method-response --rest-api-id lorcvbwvua --resource-id hkmqfq2jp3 --http-method GET --status-code 200 --response-models "{\"application/json\": \"Empty\"}"
 
+aws lambda add-permission --function-name resume-function --statement-id apigateway-lorcvbwvua-get --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:us-east-1:339828646418:lorcvbwvua/*/GET/" --region us-east-1
+??
+
 
 
 Test in cli for lambda and for the get
