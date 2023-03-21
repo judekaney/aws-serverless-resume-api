@@ -1,6 +1,6 @@
 # AWS Serverless Resume API
 Create a serverless API backed by a Python-based Lambda function and S3 bucket that responds to HTTP requests with your resume in JSON format—all in AWS. 
-(Want to do this automatically? Use this SAM)
+
 ## Architecture
 
 ![Diagram](aws-serverless-resume-API-diagram.png)
