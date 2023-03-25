@@ -1,0 +1,160 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+# Define parameters
+Parameters:
+  BucketName:
+    Type: String
+    Default: my-resume-bucket
+# Define resources
+Resources:
+# Create bucket
+  ResumeBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub "${BucketName}-${AWS::AccountId}"
+# Create execution role for lambda
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: resume-fetch-lambda-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+# Create policy to allow lambda to list and get objects from my-resume-bucket
+      Policies:
+        - PolicyName: s3-read-access-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${ResumeBucket}' 
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${ResumeBucket}/*'
+# Create lambda function
+  ResumeLambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: fetch-resume-lambda
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import os
+
+          s3 = boto3.client('s3')
+          bucket_name = os.environ['BUCKET_NAME']
+          
+          # Get bucket contents
+          bucket_contents = s3.list_objects_v2(Bucket=bucket_name)
+          # Get first object and set resume-key variable
+          first_object = bucket_contents['Contents'][0]
+          resume_key = first_object['Key']
+
+
+          def lambda_handler(event, context):
+              # Read the resume file from S3
+              response = s3.get_object(Bucket=bucket_name, Key=resume_key)
+              resume_data = response['Body'].read().decode('utf-8')
+
+              # Parse the JSON data
+              resume_json = json.loads(resume_data)
+
+              # Set HTTP response headers
+              headers = {
+                  'Content-Type': 'application/json',
+                  'Access-Control-Allow-Origin': '*'
+              }
+
+              # Return the formatted resume data as an HTTP response
+              return {
+                  'statusCode': 200,
+                  'headers': headers,
+                  'body': resume_json
+              }
+      Runtime: python3.9
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref ResumeBucket
+      Timeout: 30
+# Create permission that allows api to invoke lambda function
+  MyLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt 
+        - ResumeLambdaFunction
+        - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub >-
+        arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyRestApi}/*/GET/getresume
+# Create API
+  MyRestApi:
+    Type: 'AWS::ApiGateway::RestApi'
+    Properties:
+      Name: resume-api
+      Description: Allows users to retreive a JSON file stored in an S3 bucket using an HTTP GET request.
+# Create API Gateway resource
+  MyResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      RestApiId: !Ref MyRestApi
+      ParentId: !GetAtt MyRestApi.RootResourceId
+      PathPart: getresume
+# Create API Gateway resource method 
+  MyGetMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      RestApiId: !Ref MyRestApi
+      ResourceId: !Ref MyResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - StatusCode: "200"
+        Uri: !Sub >-
+          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ResumeLambdaFunction.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: Empty
+    DependsOn:
+      - MyLambdaPermission
+# Create API Gateway resource deployment 
+  MyDeployment:
+    Type: "AWS::ApiGateway::Deployment"
+    DependsOn: 
+      - MyGetMethod
+    Properties:
+      RestApiId: !Ref MyRestApi
+# Create API Gateway Stage
+  MyStage:
+    Type: "AWS::ApiGateway::Stage"
+    Properties:
+      RestApiId: !Ref MyRestApi
+      DeploymentId: !Ref MyDeployment
+      StageName: "prod"
+      MethodSettings:
+        -
+          HttpMethod: "*"
+          ResourcePath: "/*"
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 3
+      
+      
