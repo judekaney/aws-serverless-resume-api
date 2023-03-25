@@ -32,7 +32,7 @@ Create a serverless API backed by a Python-based Lambda function and S3 bucket t
   aws cloudformation deploy --stack-name <stack-name> --template-file </path/to/serverless-resume-api.yaml> --capabilities CAPABILITY_NAMED_IAM   
   ```
   * Replace `<stack-name>` with whatever you would like to call your CloudFormation stack.
-  * Replace `</path/to/serverless-resume-api.yaml>` with the local path to your serverless-resume-api.yaml file. 
+  * Replace `</path/to/serverless-resume-api.yaml>` with the local path to your `serverless-resume-api.yaml` file. 
 2. After your terminal shows `"Successfully created/updated stack - <stack-name>"` use the following command to upload your resume to the S3 bucket:
   ```sh
   aws s3 cp <path/to/local/resumefile.json>  s3://my-resume-bucket-<account-number>    
